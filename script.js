@@ -20,66 +20,128 @@
     var expires = "expires="+ d.toUTCString();
     document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
   }
+  function cleanCookies() {
+    document.cookie = '';
+  }
+  function cleanArray(array) {
+    var i, j, len = array.length, out = [], obj = {};
+    for (i = 0; i < len; i++) {
+      obj[array[i]] = 0;
+    }
+    for (j in obj) {
+      out.push(j);
+    }
+    return out;
+  }
 
   var app = new Vue({
     el: '#app',
     data: {
-      lund: {
-        name:       'Lund',
-        warframes:  [],
-        primary:    [],
-        secondary:  [],
-        melee:      [],
-      },
-      ystaroth: {
-        name:    'Ystaroth',
-        warframes:  [],
-        primary:    [],
-        secondary:  [],
-        melee:      [],
-      },
+      users:            [],
+      challenges:       [],
       display_draw:     true,
       display_params:   false,
+      display_challenge:false,
       current_user:     null,
+      user_names:       null,
+      modal_content:    false,
+      is_challenge:     false,
+      challenger:       { name: '', challenge: '' },
+      input_list:       [{ value: ''}],
       /* end of data */
     },
-    mounted: function() {
-      var cached_data_lund = {
-        warframes:  getCookie('Lund_warframes'),
-        primary:    getCookie('Lund_primary'),
-        secondary:  getCookie('Lund_secondary'),
-        melee:      getCookie('Lund_melee'),
-      };
-      var cached_data_ystaroth = {
-        warframes:  getCookie('Ystaroth_warframes'),
-        primary:    getCookie('Ystaroth_primary'),
-        secondary:  getCookie('Ystaroth_secondary'),
-        melee:      getCookie('Ystaroth_melee'),
-      };
-
-      for (var index in cached_data_lund) {
-        if (typeof cached_data_lund[index] !== 'undefined' && cached_data_lund[index].length != 0) {
-          tmp = JSON.parse(cached_data_lund[index]);
-
-          for (var i = 0 ; i < tmp.length ; ++i) {
-            this.lund[index].push({ origin: tmp[i], snake: _.snakeCase(tmp[i]) });
-          }
-        }
-      }
-      for (var index in cached_data_ystaroth) {
-        if (typeof cached_data_ystaroth[index] !== 'undefined' && cached_data_ystaroth[index].length != 0) {
-          tmp = JSON.parse(cached_data_ystaroth[index]);
-
-          for (var i = 0 ; i < tmp.length ; ++i) {
-            this.ystaroth[index].push({ origin: tmp[i], snake: _.snakeCase(tmp[i]) });
-          }
-        }
-      }
-
-      this.current_user = this.lund;
-      this.restoreTextarea();
-    },
     methods: {
+      discardModal: function() {
+        $('.reveal-modal').remove();
+        $('.reveal-modal-bg').remove();
+      },
+      cleanProject: function(event) {
+        this.users = [];
+        this.modal_content = true;
+        $('#modalTitle').html('Qui sont vos utilisateurs ?');
+        cleanCookies();
+      },
+      saveNames: function(event) {
+        var users = [];
+
+        for (var index in this.input_list) {
+          if (this.input_list[index].value != '') {
+            users.push(this.input_list[index].value);
+          }
+        }
+
+        this.user_names = cleanArray(users);
+        setCookie('users', JSON.stringify(this.user_names), 365);
+        for (var index in this.user_names) {
+          this.users[this.user_names[index]] = {
+            name:       users[index],
+            warframes:  [],
+            primary:    [],
+            secondary:  [],
+            melee:      [],
+          };
+        }
+        this.current_user = this.users[this.user_names[0]];
+        this.discardModal();
+      },
+      fromCache: function(event) {
+        var user_names = getCookie('users');
+        if (typeof user_names !== 'undefined' && user_names.length != 0) {
+          this.user_names = JSON.parse(user_names)
+          this.initFromCache(this.user_names);
+          this.discardModal();
+        } else {
+          this.cleanProject(event);
+        }
+      },
+      addUser: function(event) {
+        this.input_list.push({ value: ''});
+      },
+      removeUser: function(index, event) {
+        this.input_list.splice(index, 1);
+      },
+      initFromCache: function(users) {
+        var cache = {};
+
+        for (var index in users) {
+          cache[users[index]] = {
+            warframes:  getCookie(users[index] + '_warframes'),
+            primary:    getCookie(users[index] + '_primary'),
+            secondary:  getCookie(users[index] + '_secondary'),
+            melee:      getCookie(users[index] + '_melee'),
+          };
+        }
+
+        var challenges = getCookie('challenges');
+        if (challenges !== 'undefined' && challenges.length > 0) {
+          this.challenges = JSON.parse(challenges);
+        }
+
+        for (var index in cache) {
+          var user = {
+            name: index
+          };
+
+          for (var key in cache[index]) {
+            user[key] = [];
+
+            if (typeof cache[index][key] !== 'undefined' && cache[index][key].length != 0) {
+              tmp = JSON.parse(cache[index][key]);
+
+              for (var i = 0 ; i < tmp.length ; ++i) {
+                user[key].push({ origin: tmp[i], snake: _.snakeCase(tmp[i]) });
+              }
+            } else {
+              user[key] = [];
+            }
+          }
+
+          this.users[index] = user;
+        }
+
+        this.current_user = this.users[users[0]];
+        this.restoreTextarea();
+      },
       getNumsFromRange: function (obj) {
     		var getRandomInt = function (max) {
     			return Math.floor(Math.random() * max);
@@ -95,23 +157,27 @@
     	},
       changeTab: function(event) {
         id = $(event.target).attr('id');
+        this.display_draw       = false;
+        this.display_params     = false;
+        this.display_challenge  = false;
         if (id == 'tirage') {
-          this.display_draw   = true;
-          this.display_params = false;
+          this.display_draw       = true;
         } else if (id == 'params') {
-          this.display_draw   = false;
-          this.display_params = true;
+          this.display_params     = true;
+        } else if (id == 'challenge') {
+          this.display_challenge  = true;
         }
       },
-      changeUser: function(event) {
+      changeUser: function(name, event) {
         /* clean */
         $('textarea').val('');
         $('#slots div').html('?')
 
-        if (this.current_user.name == "Lund") {
-          this.current_user = this.ystaroth;
-        } else {
-          this.current_user = this.lund;
+        for (var index in this.users) {
+          if (this.users[index].name == name) {
+            this.current_user = this.users[index];
+            break;
+          }
         }
 
         this.restoreTextarea();
@@ -128,17 +194,25 @@
           i = 0;
           list = '';
 
-          for (var index in this.lund[options[name_option]]) {
+          for (var index in this.current_user[options[name_option]]) {
             if (i != 0) {
               list += "\n";
             }
-            list += this.lund[options[name_option]][index].origin;
+            list += this.current_user[options[name_option]][index].origin;
             ++i;
           }
           $($('textarea')[area]).val(list);
           ++area;
         }
 
+        list = "";
+        for (var index in this.challenges) {
+          if (index > 0) {
+            list += "\n";
+          }
+          list += this.challenges[index];
+        }
+        $('#challenge textarea').val(list);
       },
       roll: function(event) {
         var nums = this.getNumsFromRange({
@@ -182,7 +256,7 @@
           light_for_cookie.push(origin[index]);
         }
         this.current_user.warframes = final;
-        setCookie(this.current_user.name + '_warframes', JSON.stringify(light_for_cookie));
+        setCookie(this.current_user.name + '_warframes', JSON.stringify(light_for_cookie), 365);
       },
       putPrimaries: function(event) {
         var final = [];
@@ -195,7 +269,7 @@
           light_for_cookie.push(origin[index]);
         }
         this.current_user.primary = final;
-        setCookie(this.current_user.name + '_primary', JSON.stringify(light_for_cookie));
+        setCookie(this.current_user.name + '_primary', JSON.stringify(light_for_cookie), 365);
       },
       putSecondaries: function(event) {
         var final = [];
@@ -208,7 +282,7 @@
           light_for_cookie.push(origin[index]);
         }
         this.current_user.secondary = final;
-        setCookie(this.current_user.name + '_secondary', JSON.stringify(light_for_cookie));
+        setCookie(this.current_user.name + '_secondary', JSON.stringify(light_for_cookie), 365);
       },
       putMelees: function(event) {
         var final = [];
@@ -221,13 +295,49 @@
           light_for_cookie.push(origin[index]);
         }
         this.current_user.melee = final;
-        setCookie(this.current_user.name + '_melee', JSON.stringify(light_for_cookie));
+        setCookie(this.current_user.name + '_melee', JSON.stringify(light_for_cookie), 365);
+      },
+      putChallenges: function(event) {
+        var challenges = [];
+        var values = this.parse_textarea($(event.target).val());
+
+        for (var index in values) {
+          challenges.push(values[index]);
+        }
+        this.challenges = challenges;
+        setCookie('challenges', JSON.stringify(challenges), 365);
       },
       parse_textarea: function(content) {
         return content.split("\n");
+      },
+      pickChallenge: function() {
+        var nums = this.getNumsFromRange({
+          is_challenge:     2,
+          challenger:       this.user_names.length,
+          challenge_name:   this.challenges.length
+        });
+
+        if (nums.is_challenge) {
+          this.is_challenge = true;
+          this.challenger.name = this.user_names[nums.challenger];
+          this.challenger.challenge = this.challenges[nums.challenge_name];
+        } else {
+          this.is_challenge = false;
+          this.challenger.name = '';
+          this.challenger.challenge = '';
+        }
+
+      },
+      addChallenge: function() {
+        var nums = this.getNumsFromRange({
+          challenge_name:   this.challenges.length
+        });
+
+        this.challenger.challenge += '<br />' + this.challenges[nums.challenge_name];
       }
       /* end of methods*/
     },
   });
 
+  $(document).foundation();
 }());
