@@ -145,7 +145,7 @@
       },
       getNumsFromRange: function (obj) {
     		var getRandomInt = function (max) {
-    			return Math.floor(Math.random() * max);
+    			return chance.integer({min: 0, max: max});
     		};
 
         var return_value = {};
